@@ -10,7 +10,6 @@
 #include <QTimer>
 #include <QtMultimedia/QCamera>
 #include <QtMultimedia/QCameraImageCapture>
-#include <QtMultimedia/QMediaRecorder>
 #include <QBuffer>
 #include <QSettings>
 #include <QLabel>
@@ -41,7 +40,6 @@ public:
     QTimer *imageStreamTimer;
     QCamera *camera;
     QCameraImageCapture *imageCapture;
-    QMediaRecorder *recorder;
     QLabel *statusIcon;
 
     void send_message(QString command, QString payload);
