@@ -183,7 +183,7 @@ void MainWindow::on_authenticate(QString payload)
 
 void MainWindow::on_authenticated(QString payload)
 {
-    statusBar()->showMessage("Client authenticated. Starting the Heartbeat.");
+    statusBar()->showMessage("Client authenticated.");
     heartbeatTimer->start(10000);
 }
 
@@ -196,7 +196,7 @@ void MainWindow::on_forbidden(QString payload)
 
 void MainWindow::on_heartbeatTimer_timeout()
 {
-    statusBar()->showMessage("Sending a heartbeat.");
+    //statusBar()->showMessage("Sending a heartbeat.");
     send_message(QString("heartbeat"), QString(""));
 }
 
