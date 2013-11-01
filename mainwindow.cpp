@@ -26,9 +26,8 @@ MainWindow::MainWindow(QWidget *parent) :
         ui->menuDevices->addAction(videoDeviceAction);
     }
 
-    setCamera(cameraDevice);
     connect(videoDevicesGroup, SIGNAL(triggered(QAction*)), SLOT(updateCameraDevice(QAction*)));
-
+    connect(ui->actionRegister, SIGNAL(triggered()), this, SLOT(website()));
 
     busyReceiving = false;
     messageBuffer = new QString();
@@ -37,11 +36,24 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(heartbeatTimer, SIGNAL(timeout()), SLOT(on_heartbeatTimer_timeout()));
 
     imageStreamTimer = new QTimer(this);
+    connect(imageStreamTimer, SIGNAL(timeout()), SLOT(on_imageStreamTimer_timeout()));
 
     pSocket = new QTcpSocket(this);
     connect(pSocket, SIGNAL(connected()), this, SLOT(on_pSocket_connected()));
     connect(pSocket, SIGNAL(disconnected()), this, SLOT(on_pSocket_disconnected()));
     connect(pSocket, SIGNAL(readyRead()), this, SLOT(on_pSocket_readyRead()));
+    connect(pSocket, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(on_pSocket_error()));
+
+    setCamera(cameraDevice);
+
+    QSettings settings;
+    ui->clientSecretEdit->setText(settings.value("user/clientSecret", "").toString());
+
+    statusIcon = new QLabel();
+    statusIcon->setGeometry(0,0, 12, 12);
+    statusIcon->setPixmap(QPixmap("://icon/red_orb.png"));
+    statusIcon->setToolTip("Idle");
+    statusBar()->addPermanentWidget(statusIcon);
 }
 
 MainWindow::~MainWindow()
@@ -54,10 +66,16 @@ void MainWindow::on_connectButton_clicked()
 {
     if(pSocket->state() == QTcpSocket::UnconnectedState)
     {
-        pSocket->connectToHost(HOSTNAME, PORT);
+        QSettings settings;
+        statusBar()->showMessage("Connecting");
+        pSocket->connectToHost(settings.value("global/hostName", HOSTNAME).toString(), settings.value("global/hostPort", PORT).toInt());
+
+        if(ui->clientSecretEdit->text().length() > 0)
+            settings.setValue("user/clientSecret", ui->clientSecretEdit->text());
     }
     else
     {
+        send_message(QString("disconnect"), QString(""));
         pSocket->disconnectFromHost();
     }
 }
@@ -68,6 +86,9 @@ void MainWindow::on_pSocket_connected()
     ui->connectButton->setText("Disconnect");
     ui->clientSecretEdit->setEnabled(false);
     ui->menuDevices->setEnabled(false);
+    ui->menuSettings->setEnabled(false);
+    statusIcon->setPixmap(QPixmap("://icon/blue_orb.png"));
+    statusIcon->setToolTip("Connected");
 }
 
 void MainWindow::on_pSocket_disconnected()
@@ -76,6 +97,9 @@ void MainWindow::on_pSocket_disconnected()
     ui->connectButton->setText("Connect");
     ui->clientSecretEdit->setEnabled(true);
     ui->menuDevices->setEnabled(true);
+    ui->menuSettings->setEnabled(true);
+    statusIcon->setPixmap(QPixmap("://icon/red_orb.png"));
+    statusIcon->setToolTip("Idle");
 
     if(heartbeatTimer->isActive())
         heartbeatTimer->stop();
@@ -83,6 +107,11 @@ void MainWindow::on_pSocket_disconnected()
     if(imageStreamTimer->isActive())
         imageStreamTimer->stop();
 
+}
+
+void MainWindow::on_pSocket_error()
+{
+    statusBar()->showMessage("Connection error");
 }
 
 void MainWindow::on_pSocket_readyRead()
@@ -172,10 +201,37 @@ void MainWindow::on_heartbeatTimer_timeout()
 }
 
 
+void MainWindow::on_start_stream(QString payload)
+{
+    statusIcon->setPixmap(QPixmap("://icon/green_orb.png"));
+    statusIcon->setToolTip("Streaming");
+    statusBar()->showMessage("Server requested the image stream. Starting.");
+    imageStreamTimer->start(300);
+}
+
+void MainWindow::on_imageStreamTimer_timeout()
+{
+    QByteArray ba;
+    QBuffer buffer(&ba);
+    buffer.open(QIODevice::WriteOnly);
+    ui->viewFinder->grab().save(&buffer, "JPG");
+    send_message(QString("image"), QString(buffer.data().toBase64()));
+}
+
+
+void MainWindow::on_stop_stream(QString payload)
+{
+    statusIcon->setPixmap(QPixmap("://icon/blue_orb.png"));
+    statusIcon->setToolTip("Connected");
+    statusBar()->showMessage("Server requested stopping the image stream. Stopping.");
+    if(imageStreamTimer->isActive())
+        imageStreamTimer->stop();
+}
+
+
 void MainWindow::setCamera(const QByteArray &cameraDevice)
 {
     delete imageCapture;
-    delete camera;
 
     if (cameraDevice.isEmpty())
         camera = new QCamera;
@@ -183,9 +239,7 @@ void MainWindow::setCamera(const QByteArray &cameraDevice)
         camera = new QCamera(cameraDevice);
 
     connect(camera, SIGNAL(error(QCamera::Error)), this, SLOT(displayCameraError()));
-
-    imageCapture = new QCameraImageCapture(camera);
-
+    imageCapture = new QCameraImageCapture(camera);    
     camera->setViewfinder(ui->viewFinder);
 
     connect(imageCapture, SIGNAL(readyForCaptureChanged(bool)), this, SLOT(readyForCapture(bool)));
@@ -207,6 +261,8 @@ void MainWindow::readyForCapture(bool ready)
 
 void MainWindow::updateCameraDevice(QAction *action)
 {
+    camera->stop();
+    camera->unload();
     setCamera(action->data().toByteArray());
 }
 
@@ -214,4 +270,22 @@ void MainWindow::updateCameraDevice(QAction *action)
 void MainWindow::displayCameraError()
 {
     statusBar()->showMessage("Camera error.");
+}
+
+void MainWindow::closing()
+{
+    if(pSocket->state() != QTcpSocket::UnconnectedState)
+    {
+        send_message(QString("disconnect"), QString(""));
+        pSocket->disconnectFromHost();
+    }
+}
+
+
+void MainWindow::website()
+{
+    QUrl website_url = QUrl();
+    website_url.setHost(QString(HOSTNAME));
+    website_url.setScheme("http");
+    QDesktopServices::openUrl(website_url);
 }

@@ -10,8 +10,12 @@
 #include <QTimer>
 #include <QtMultimedia/QCamera>
 #include <QtMultimedia/QCameraImageCapture>
-#include <QtMultimedia>
-#include <QVideoWidget>
+#include <QtMultimedia/QMediaRecorder>
+#include <QBuffer>
+#include <QSettings>
+#include <QLabel>
+#include <QDesktopServices>
+#include <QUrl>
 
 #define JSON_DATA_BOUNDARY ((const char *) "---jsonrpcprotocolboundary---")
 #define HOSTNAME "localhost"
@@ -37,21 +41,26 @@ public:
     QTimer *imageStreamTimer;
     QCamera *camera;
     QCameraImageCapture *imageCapture;
+    QMediaRecorder *recorder;
+    QLabel *statusIcon;
 
     void send_message(QString command, QString payload);
-
 
 private slots:
 
     void displayCameraError();
     void on_connectButton_clicked();
+    void closing();
+    void website();
 
     void on_pSocket_connected();
     void on_pSocket_disconnected();
     void on_pSocket_readyRead();
+    void on_pSocket_error();
     void on_message(QString &message);
 
     void on_heartbeatTimer_timeout();
+    void on_imageStreamTimer_timeout();
 
     void readyForCapture(bool ready);
     void setCamera(const QByteArray &cameraDevice);
@@ -61,6 +70,8 @@ private slots:
     void on_authenticate(QString payload);
     void on_authenticated(QString payload);
     void on_forbidden(QString payload);
+    void on_start_stream(QString payload);
+    void on_stop_stream(QString payload);
 
 private:
     Ui::MainWindow *ui;

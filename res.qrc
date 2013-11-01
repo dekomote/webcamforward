@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icon/surveillance_camera.png</file>
+        <file>icon/red_orb.png</file>
+        <file>icon/green_orb.png</file>
+        <file>icon/blue_orb.png</file>
+    </qresource>
+</RCC>
